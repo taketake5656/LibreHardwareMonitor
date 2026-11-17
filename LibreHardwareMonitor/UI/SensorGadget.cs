@@ -11,6 +11,7 @@ using System.Drawing.Imaging;
 using System.Windows.Forms;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using LibreHardwareMonitor.Hardware;
 using LibreHardwareMonitor.Utilities;
 
@@ -45,6 +46,14 @@ public class SensorGadget : Gadget
     private readonly PersistentSettings _settings;
     private readonly UserOption _hardwareNames;
 
+    // Hardware and sensor events can be raised on the background update thread (e.g. when a sensor is
+    // activated inside IHardware.Update after resuming from sleep). The gadget must only be modified and
+    // redrawn on the UI thread, because GadgetWindow reuses a single GDI+ Graphics object and _sensors is
+    // not thread-safe. Otherwise GDI+ throws "Object is currently in use elsewhere" in OnPaint.
+    private readonly SynchronizationContext _uiContext;
+    private readonly int _uiThreadId;
+    private volatile bool _disposed;
+
     private Font _largeFont;
     private Font _smallFont;
     private Brush _textBrush;
@@ -56,6 +65,8 @@ public class SensorGadget : Gadget
     {
         _unitManager = unitManager;
         _settings = settings;
+        _uiContext = SynchronizationContext.Current;
+        _uiThreadId = Thread.CurrentThread.ManagedThreadId;
         computer.HardwareAdded += HardwareAdded;
         computer.HardwareRemoved += HardwareRemoved;
 
@@ -278,6 +289,7 @@ public class SensorGadget : Gadget
 
     public override void Dispose()
     {
+        _disposed = true;
 
         _largeFont.Dispose();
         _largeFont = null;
@@ -324,8 +336,30 @@ public class SensorGadget : Gadget
         base.Dispose();
     }
 
+    /// <summary>
+    /// Runs the action on the UI thread. Returns <see langword="true" /> if the action was posted
+    /// to the UI thread and the caller must not continue.
+    /// </summary>
+    private bool PostToUIThread(Action action)
+    {
+        if (_uiContext == null || Thread.CurrentThread.ManagedThreadId == _uiThreadId)
+            return false;
+
+        // Post (asynchronous) instead of Send to avoid deadlocks with Computer locks held by the caller.
+        _uiContext.Post(_ =>
+        {
+            if (!_disposed)
+                action();
+        }, null);
+
+        return true;
+    }
+
     private void HardwareRemoved(IHardware hardware)
     {
+        if (PostToUIThread(() => HardwareRemoved(hardware)))
+            return;
+
         hardware.SensorAdded -= SensorAdded;
         hardware.SensorRemoved -= SensorRemoved;
 
@@ -338,6 +372,9 @@ public class SensorGadget : Gadget
 
     private void HardwareAdded(IHardware hardware)
     {
+        if (PostToUIThread(() => HardwareAdded(hardware)))
+            return;
+
         foreach (ISensor sensor in hardware.Sensors)
             SensorAdded(sensor);
 
@@ -350,12 +387,18 @@ public class SensorGadget : Gadget
 
     private void SensorAdded(ISensor sensor)
     {
+        if (PostToUIThread(() => SensorAdded(sensor)))
+            return;
+
         if (_settings.GetValue(new Identifier(sensor.Identifier, "gadget").ToString(), false))
             Add(sensor);
     }
 
     private void SensorRemoved(ISensor sensor)
     {
+        if (PostToUIThread(() => SensorRemoved(sensor)))
+            return;
+
         if (Contains(sensor))
             Remove(sensor, false);
     }
