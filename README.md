@@ -1,43 +1,70 @@
-# LibreHardwareMonitor
+# LibreHardwareMonitor（taketake5656 フォーク版）
 [![GitHub license](https://img.shields.io/github/license/LibreHardwareMonitor/LibreHardwareMonitor)](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/master/LICENSE) [![Nuget](https://img.shields.io/nuget/v/LibreHardwareMonitorLib)](https://www.nuget.org/packages/LibreHardwareMonitorLib/) [![Nuget (with prereleases)](https://img.shields.io/nuget/vpre/LibreHardwareMonitorLib?label=nuget-pre)](https://www.nuget.org/packages/LibreHardwareMonitorLib/) [![Nuget](https://img.shields.io/nuget/dt/LibreHardwareMonitorLib?label=nuget-downloads)](https://www.nuget.org/packages/LibreHardwareMonitorLib/)
 
-Libre Hardware Monitor is free software that can monitor the temperature sensors, fan speeds, voltages, load and clock speeds of your computer. 
+> **このリポジトリについて**
+> 本家 [LibreHardwareMonitor/LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) の v0.9.6 をベースにした、自分用の修正版です。
 
-## What's included?
-| Name| .NET | Build Status |
-| --- | --- | --- | 
-| **LibreHardwareMonitor** <br /> Windows Forms based application that presents all data in a graphical interface | .NET Framework 4.7.2 <br/> .NET 10.0 | [![Build status](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/actions/workflows/master.yml/badge.svg)](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/actions) | 
-| **LibreHardwareMonitorLib** <br /> Library that allows you to use all features in your own application | .NET Framework 4.7.2 <br/> .NET Standard 2.0 <br/> .NET 8.0, .NET 9.0, and .NET 10.0 | [![Build status](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/actions/workflows/master.yml/badge.svg)](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/actions) | 
+## このフォークでの変更点
+### デスクトップガジェットがスリープ復帰時にクラッシュする問題の修正
+「Show Gadget」を有効にしていると、スリープからの復帰時にときどき次の例外で落ちる問題を修正しました。
 
-## What can it do?
-You can read information from devices such as:
-- Motherboards
-- Intel and AMD processors
-- NVIDIA, AMD and Intel graphics cards
-- HDD, SSD and NVMe hard drives
-- Network cards
+```
+System.InvalidOperationException: Object is currently in use elsewhere.
+   at LibreHardwareMonitor.UI.SensorGadget.OnPaint(...)
+```
 
-## Where can I download it?
-You can download the latest release [here](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases). You can also install it using WinGet:
+- **原因**：復帰直後にハードウェアが作り直されると、センサーの追加・削除イベントがバックグラウンドの更新スレッドで発生します。このときガジェット（`SensorGadget`）がそのスレッドでサイズ変更と再描画を行い、UI スレッドのタイマー描画と同じ GDI+ の `Graphics` を同時に使っていました。
+- **修正内容**：`SensorGadget` で受け取るハードウェア・センサーの追加・削除イベントを、`SynchronizationContext.Post` で UI スレッドに回して処理するようにしました（`LibreHardwareMonitor/UI/SensorGadget.cs`）。
+
+### GitHub Actions でのビルド
+`.github/workflows/fork-build.yml` を追加しました。`fix/gadget-thread-safety` ブランチへの push、または手動実行（workflow_dispatch）でビルドされます。
+
+- ビルド結果は [Actions](https://github.com/taketake5656/LibreHardwareMonitor/actions) の各実行ページの「Artifacts」からダウンロードできます（保持期間 90 日）。
+  - `LibreHardwareMonitor-gadgetfix`：.NET Framework 4.7.2 版（通常はこちら）
+  - `LibreHardwareMonitor-gadgetfix (.NET 10)`：.NET 10 版
+
+---
+
+以下は本家 README の日本語訳です。
+
+## 概要
+Libre Hardware Monitor は、コンピューターの温度センサー、ファン回転数、電圧、負荷、クロック周波数を監視できるフリーソフトウェアです。
+
+## 含まれるもの
+| 名前 | .NET | ビルド状況 |
+| --- | --- | --- |
+| **LibreHardwareMonitor** <br /> すべてのデータをグラフィカルな画面で表示する Windows Forms アプリケーション | .NET Framework 4.7.2 <br/> .NET 10.0 | [![Build status](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/actions/workflows/master.yml/badge.svg)](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/actions) |
+| **LibreHardwareMonitorLib** <br /> すべての機能を自分のアプリケーションで使えるようにするライブラリ | .NET Framework 4.7.2 <br/> .NET Standard 2.0 <br/> .NET 8.0、.NET 9.0、.NET 10.0 | [![Build status](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/actions/workflows/master.yml/badge.svg)](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/actions) |
+
+## できること
+次のようなデバイスから情報を読み取れます。
+- マザーボード
+- Intel と AMD のプロセッサー
+- NVIDIA、AMD、Intel のグラフィックカード
+- HDD、SSD、NVMe ドライブ
+- ネットワークカード
+
+## ダウンロード
+本家の最新リリースは[こちら](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases)からダウンロードできます。WinGet でもインストールできます。
 
 ```
 winget install LibreHardwareMonitor.LibreHardwareMonitor
 ```
 
-### Nightly builds
-If you have a **GitHub** account, you can download nightly builds [here](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/actions). Otherwise, you can download the *latest* nightly build [here](https://nightly.link/LibreHardwareMonitor/LibreHardwareMonitor/workflows/master/master/LibreHardwareMonitor.zip).
+### ナイトリービルド
+**GitHub** アカウントがあれば、ナイトリービルドを[こちら](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/actions)からダウンロードできます。アカウントがない場合は、*最新の*ナイトリービルドを[こちら](https://nightly.link/LibreHardwareMonitor/LibreHardwareMonitor/workflows/master/master/LibreHardwareMonitor.zip)からダウンロードできます。
 
-## How can I help improve it?
-The LibreHardwareMonitor team welcomes feedback and contributions!<br/>
-You can check if it works properly on your motherboard. For many manufacturers, the way of reading data differs a bit, so if you notice any inaccuracies, please send us a pull request. If you have any suggestions or improvements, don't hesitate to create an issue.
+## 改善に協力するには
+LibreHardwareMonitor チームはフィードバックや貢献を歓迎しています。<br/>
+お使いのマザーボードで正しく動作するか確認してみてください。メーカーによってデータの読み取り方が少しずつ異なるため、不正確な点に気づいたらプルリクエストを送ってください。提案や改善案があれば、気軽に Issue を作成してください。
 
-## Developer information
-**Integrate the library in own application**
-1. Add the [LibreHardwareMonitorLib](https://www.nuget.org/packages/LibreHardwareMonitorLib/) NuGet package to your application.
-2. Use the sample code below.
+## 開発者向け情報
+**自分のアプリケーションにライブラリを組み込む**
+1. [LibreHardwareMonitorLib](https://www.nuget.org/packages/LibreHardwareMonitorLib/) NuGet パッケージをアプリケーションに追加します。
+2. 下のサンプルコードを使います。
 
 
-**Sample code**
+**サンプルコード**
 ```c#
 public class UpdateVisitor : IVisitor
 {
@@ -94,10 +121,10 @@ public void Monitor()
 }
 ```
 
-**Administrator rights**
+**管理者権限**
 
-Some sensors require administrator privileges to access the data. Restart your IDE with admin privileges, or add an [app.manifest](https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests) file to your project with requestedExecutionLevel on requireAdministrator.
+一部のセンサーは、データの取得に管理者権限が必要です。IDE を管理者権限で再起動するか、プロジェクトに [app.manifest](https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests) ファイルを追加して requestedExecutionLevel を requireAdministrator に設定してください。
 
 
-## License
-LibreHardwareMonitor is free and open source software licensed under MPL 2.0. Some parts of LibreHardwareMonitor are licensed under different terms, see [THIRD-PARTY-LICENSES](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/master/THIRD-PARTY-NOTICES.txt).
+## ライセンス
+LibreHardwareMonitor は MPL 2.0 でライセンスされた、自由でオープンソースのソフトウェアです。一部は別の条件でライセンスされています。[THIRD-PARTY-LICENSES](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/master/THIRD-PARTY-NOTICES.txt) を参照してください。
